@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ToneRater — a multimodal autorater for support replies</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=Spline+Sans+Mono:wght@400;500;600&family=Spline+Sans:wght@400;500;600;700&display=swap');
+  :root{
+    --ink:#16140f; --paper:#f4f0e6; --paper-2:#ebe5d6; --line:#d8cfb8;
+    --accent:#c8492f; --accent-2:#2f6b4c; --warn:#b8860b; --muted:#6b6453;
+    --card:#fbf8f0; --shadow:0 1px 0 #fff inset, 0 2px 10px rgba(20,18,12,.08);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--paper);
+    background-image:radial-gradient(circle at 1px 1px, rgba(20,18,12,.04) 1px, transparent 0);
+    background-size:22px 22px; color:var(--ink); font-family:'Spline Sans',sans-serif;
+    line-height:1.5; padding:32px 20px 80px;}
+  .wrap{max-width:1000px;margin:0 auto}
+  header{border-bottom:2px solid var(--ink);padding-bottom:18px}
+  .eyebrow{font-family:'Spline Sans Mono',monospace;font-size:12px;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--accent);font-weight:600}
+  h1{font-family:'Fraunces',serif;font-weight:900;font-size:clamp(34px,6vw,58px);
+    line-height:.98;letter-spacing:-.02em;margin:6px 0 10px}
+  .sub{font-size:16px;color:var(--muted);max-width:680px}
+  .sub b{color:var(--ink);font-weight:600}
+
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:10px;
+    box-shadow:var(--shadow);padding:20px;margin-top:22px}
+  .panel h2{font-family:'Fraunces',serif;font-weight:600;font-size:20px;margin-bottom:4px}
+  .panel .note{font-size:13.5px;color:var(--muted);margin-bottom:14px}
+
+  .controls{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end}
+  .ctrl{display:flex;flex-direction:column;gap:6px}
+  .ctrl label{font-family:'Spline Sans Mono',monospace;font-size:11px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--muted)}
+  .seg{display:inline-flex;border:1px solid var(--ink);border-radius:8px;overflow:hidden}
+  .seg button{font-family:'Spline Sans Mono',monospace;font-size:12.5px;padding:9px 13px;
+    background:var(--card);border:none;cursor:pointer;color:var(--ink);font-weight:500}
+  .seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+  .seg button + button{border-left:1px solid var(--ink)}
+  select{font-family:'Spline Sans Mono',monospace;font-size:13px;padding:9px 11px;
+    border:1px solid var(--ink);border-radius:8px;background:var(--card);color:var(--ink)}
+  .run{font-family:'Spline Sans Mono',monospace;font-weight:600;font-size:14px;
+    background:var(--accent);color:#fff;border:none;padding:12px 22px;border-radius:8px;
+    cursor:pointer;letter-spacing:.03em;transition:transform .08s}
+  .run:hover{transform:translateY(-1px)} .run:disabled{opacity:.5;cursor:wait;transform:none}
+
+  .board{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px}
+  .stat{background:var(--paper-2);border:1px solid var(--line);border-radius:8px;padding:14px}
+  .stat .k{font-family:'Spline Sans Mono',monospace;font-size:10.5px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--muted)}
+  .stat .v{font-family:'Fraunces',serif;font-weight:900;font-size:28px;line-height:1;margin-top:6px}
+  .stat .v small{font-size:14px;font-weight:600;color:var(--muted)}
+
+  table{width:100%;border-collapse:collapse;margin-top:16px;font-size:14px}
+  th{font-family:'Spline Sans Mono',monospace;font-size:10.5px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 10px;
+    border-bottom:1px solid var(--ink)}
+  td{padding:10px;border-bottom:1px solid var(--line);vertical-align:top}
+  .reply{max-width:380px}
+  .reply .q{color:var(--muted);font-size:12.5px;margin-bottom:3px}
+  .chip{font-family:'Spline Sans Mono',monospace;font-size:10px;font-weight:600;padding:1px 6px;
+    border-radius:4px;background:var(--paper-2);color:var(--muted);margin-left:6px}
+  .badge{font-family:'Spline Sans Mono',monospace;font-size:11px;font-weight:600;
+    padding:2px 7px;border-radius:5px;display:inline-block}
+  .b-pass{background:rgba(47,107,76,.14);color:var(--accent-2)}
+  .b-fail{background:rgba(200,73,47,.14);color:var(--accent)}
+  .b-na{background:var(--paper-2);color:var(--muted)}
+  .b-split{background:rgba(184,134,11,.16);color:var(--warn)}
+  tr.miss td{background:rgba(200,73,47,.06)}
+  .why{font-size:12px;color:var(--muted);margin-top:4px;font-style:italic}
+  .miss-flag{font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--accent);
+    font-weight:600;letter-spacing:.05em}
+  .legend{font-size:12.5px;color:var(--muted);margin-top:12px;display:flex;gap:18px;flex-wrap:wrap}
+
+  .dz{border:1.5px dashed var(--line);border-radius:8px;padding:14px;margin-top:8px;
+    font-size:13px;color:var(--muted);background:var(--paper-2);cursor:pointer;text-align:center}
+  .dz.over{border-color:var(--accent);color:var(--accent)}
+  .attached{font-family:'Spline Sans Mono',monospace;font-size:12px;color:var(--accent-2);margin-top:6px}
+
+  .takeaway{background:var(--ink);color:var(--paper);border-radius:10px;padding:18px 20px;
+    margin-top:22px;font-size:14.5px;display:none}
+  .takeaway.show{display:block}
+  .takeaway b{color:#f0c674}
+  .takeaway .t{font-family:'Fraunces',serif;font-size:18px;font-weight:600;margin-bottom:6px;color:#fff}
+
+  .concept{font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--muted);
+    border-left:3px solid var(--accent);padding-left:10px;margin-top:10px}
+  footer{margin-top:40px;font-size:12.5px;color:var(--muted);border-top:1px solid var(--line);
+    padding-top:14px;font-family:'Spline Sans Mono',monospace}
+  .err{color:var(--accent);font-size:13px;margin-top:10px}
+  .demo-banner{background:rgba(184,134,11,.14);border:1px solid var(--warn);color:#7a5a07;
+    font-size:13px;padding:10px 14px;border-radius:8px;margin-top:14px;display:none}
+  @media (max-width:680px){.board{grid-template-columns:repeat(2,1fr)}.reply{max-width:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">A multimodal eval instrument</div>
+    <h1>ToneRater</h1>
+    <p class="sub">An <b>autorater</b> for customer-support replies — including replies with
+      <b>screenshots and PDFs</b>. It scores tone and accuracy as <b>separate isolated judges</b>,
+      runs them as a <b>multi-judge panel</b>, and lets you watch a thin dataset <b>game its own
+      accuracy</b>. Built to learn how AI evals actually work.</p>
+  </header>
+
+  <div class="panel" style="background:var(--paper-2)">
+    <h2>How to explore this <span style="font-weight:400;font-size:13px;color:var(--muted)">— ~60 seconds, in order</span></h2>
+    <p class="note">An autorater is an AI that grades another AI's output. This one grades customer-support replies. The point isn't that it works — it's watching <i>how evaluation itself fails and gets fixed</i>. Walk these four steps:</p>
+    <ol style="margin:0;padding-left:20px;font-size:14px;line-height:1.7">
+      <li style="margin-bottom:6px"><b>Run <code>v1</code> on the realistic dataset.</b> One judge asks "is this reply good?" Read the misses — it passes replies that are warm but factually <i>wrong</i> (an invented button, "refunds are always instant"). One judge can't grade two things at once.</li>
+      <li style="margin-bottom:6px"><b>Switch to <code>v2</code> and run again.</b> Now tone and accuracy are graded by two <i>separate</i> judges. The warm-but-wrong replies get caught. The model didn't change — the eval design did.</li>
+      <li style="margin-bottom:6px"><b>Flip the dataset to <code>gamed</code>.</b> Accuracy jumps to ~100%. Not because the judge improved — because the test got easy. A high score on a thin dataset is how an eval lies to you.</li>
+      <li><b>Scroll to "Be the grader."</b> Label a few replies yourself, then see how often the AI judge agreed with you. Those human labels are exactly what "golden" data is — and closing that gap is the real job.</li>
+    </ol>
+    <p class="concept" style="margin-top:12px">Every behavior here maps to a concept from Anthropic's <a href="https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents" style="color:var(--accent)">Demystifying evals for AI agents</a> — isolated per-dimension judges, balanced problem sets, calibrating a model grader against human labels.</p>
+  </div>
+
+  <div class="panel">
+    <h2>The bench</h2>
+    <p class="note">Choose judge design, model, and dataset — then run. The interesting part is the misses.</p>
+    <div class="controls">
+      <div class="ctrl">
+        <label>Judge design</label>
+        <div class="seg" id="seg-judge">
+          <button data-v="v1" aria-pressed="true">v1 · one judge</button>
+          <button data-v="v2" aria-pressed="false">v2 · split dims</button>
+          <button data-v="panel" aria-pressed="false">panel · 2-judge vote</button>
+        </div>
+      </div>
+      <div class="ctrl">
+        <label>Judge model</label>
+        <select id="model">
+          <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
+          <option value="claude-opus-4-20250514">Claude Opus 4</option>
+          <option value="claude-3-5-haiku-20241022">Claude Haiku 3.5</option>
+        </select>
+      </div>
+      <div class="ctrl">
+        <label>Dataset</label>
+        <div class="seg" id="seg-data">
+          <button data-d="real" aria-pressed="true">realistic</button>
+          <button data-d="gamed" aria-pressed="false">gamed / easy</button>
+        </div>
+      </div>
+      <button class="run" id="run">Run autorater ▸</button>
+    </div>
+
+    <div class="demo-banner" id="demo-banner">
+      ⚠ The <code>/api/judge</code> function didn't return live results, so the output below is <b>illustrative</b>.
+      Two usual causes: (1) no <code>ANTHROPIC_API_KEY</code> set on the server, or (2) the page is being served
+      without Vercel's runtime — use <code>vercel dev</code> locally, not a plain static server. See the README.
+    </div>
+
+    <div class="board" id="board" style="display:none">
+      <div class="stat"><div class="k">Accuracy vs golden</div><div class="v" id="s-acc">—</div></div>
+      <div class="stat"><div class="k">Agreements</div><div class="v" id="s-agree">—</div></div>
+      <div class="stat"><div class="k">Misses to read</div><div class="v" id="s-miss">—</div></div>
+      <div class="stat"><div class="k">Judge splits</div><div class="v" id="s-split">—</div></div>
+    </div>
+    <div class="err" id="err"></div>
+  </div>
+
+  <!-- BRING YOUR OWN REPLY (multimodal) -->
+  <div class="panel">
+    <h2>Grade your own reply <span style="font-weight:400;font-size:13px;color:var(--muted)">— attach a screenshot or PDF</span></h2>
+    <p class="note">A support reply often references an image or a document. The judge reads it too — that's the multimodal part.</p>
+    <div class="controls" style="align-items:stretch">
+      <div class="ctrl" style="flex:1;min-width:240px">
+        <label>Customer message</label>
+        <textarea id="byo-q" rows="2" style="font-family:inherit;font-size:14px;padding:8px;border:1px solid var(--line);border-radius:8px;resize:vertical">Here's a screenshot of the error I keep getting.</textarea>
+      </div>
+      <div class="ctrl" style="flex:1;min-width:240px">
+        <label>Support reply to grade</label>
+        <textarea id="byo-a" rows="2" style="font-family:inherit;font-size:14px;padding:8px;border:1px solid var(--line);border-radius:8px;resize:vertical">Thanks for the screenshot! That's a 403 — your session expired. Just log back in and it'll clear.</textarea>
+      </div>
+    </div>
+    <div class="ctrl" style="margin-top:14px">
+      <label>Or load a sample (with a built-in screenshot)</label>
+      <div class="seg" id="seg-samples">
+        <button data-s="s1">403 error</button>
+        <button data-s="s2">double charge</button>
+        <button data-s="s3">crash log</button>
+      </div>
+    </div>
+    <div class="dz" id="dz">📎 Drop a screenshot (PNG/JPG) or PDF here, or click to choose
+      <input type="file" id="file" accept="image/png,image/jpeg,application/pdf" hidden />
+    </div>
+    <div class="attached" id="attached"></div>
+    <img id="preview" alt="attached preview" style="display:none;max-width:280px;margin-top:10px;border:1px solid var(--line);border-radius:8px" />
+    <button class="run" id="byo-run" style="margin-top:12px">Grade this reply ▸</button>
+    <div id="byo-out" style="margin-top:14px"></div>
+  </div>
+
+  <!-- HUMAN-IN-THE-LOOP: you be the grader -->
+  <div class="panel" id="human-panel">
+    <h2>Be the grader <span style="font-weight:400;font-size:13px;color:var(--muted)">— you label, then see if the AI judge agreed</span></h2>
+    <p class="note">Golden labels are just <b>human judgments</b>. Grade these yourself, then run the AI judge and see how often it matches you. That agreement number is the whole point of calibrating a model grader.</p>
+    <div id="human-rows"></div>
+    <button class="run" id="human-run" style="margin-top:14px" disabled>Label all, then compare with the AI judge ▸</button>
+    <div id="human-out" style="margin-top:16px"></div>
+  </div>
+
+  <div class="panel" id="results-panel" style="display:none">
+    <h2>Transcripts <span style="font-weight:400;font-size:13px;color:var(--muted)">— read the misses, that's the loop</span></h2>
+    <table>
+      <thead><tr><th>Support reply</th><th>Golden</th><th>Judge</th><th>=?</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="legend">
+      <span><span class="badge b-pass">good</span> acceptable</span>
+      <span><span class="badge b-fail">bad</span> not acceptable</span>
+      <span><span class="badge b-split">split</span> judges disagreed</span>
+      <span><span class="miss-flag">◆ MISS</span> judge ≠ golden</span>
+    </div>
+  </div>
+
+  <div class="takeaway" id="takeaway"><div class="t" id="t-title"></div><div id="t-body"></div>
+    <div class="concept" id="t-concept"></div></div>
+
+  <footer>
+    Data is hand-written, modeled on public support patterns · judging runs live via a serverless Anthropic proxy ·
+    concepts from Anthropic's "Demystifying evals for AI agents"
+  </footer>
+</div>
+
+<script>
+// ----- DATASET: two dimensions, golden = good only if BOTH hold -----
+const REAL = [
+  {id:'r01',q:"I was charged twice this month!",a:"I'm really sorry about that — I see the duplicate charge and I've refunded it; 3–5 business days.",golden:1},
+  {id:'r02',q:"I was charged twice this month!",a:"Charges are final per our terms. Please review your plan.",golden:0},
+  {id:'r03',q:"How do I export my data?",a:"Happy to help! Settings → Export, pick CSV. It emails a link within an hour.",golden:1},
+  {id:'r04',q:"How do I export my data?",a:"So sorry, I totally understand the frustration! Just hit the big Export button on the homepage.",golden:0}, // warm but wrong
+  {id:'r05',q:"Your app keeps crashing on launch.",a:"Ugh, sorry about that — update to 4.2 which fixed a launch crash; if it persists, send your device model.",golden:1},
+  {id:'r06',q:"Your app keeps crashing on launch.",a:"Have you tried turning it off and on again?",golden:0},
+  {id:'r07',q:"Refund? I cancelled yesterday.",a:"Of course — you cancelled within the 14-day window, so you're fully eligible. Started it now.",golden:1},
+  {id:'r08',q:"Refund? I cancelled yesterday.",a:"Absolutely, no worries at all, refunds are always instant and automatic!",golden:0}, // warm but wrong
+  {id:'r09',q:"I can't log in.",a:"Reset at /reset. If the email doesn't arrive in 10 min, check spam or reply here.",golden:1},
+  {id:'r10',q:"I can't log in.",a:"This is user error. Read the documentation.",golden:0},
+  {id:'r11',q:"Is my data secure after the breach?",a:"Good question — we encrypt all data at rest, but change your password as a precaution.",golden:1},
+  {id:'r12',q:"Is my data secure after the breach?",a:"Don't worry, you're 100% completely safe, nothing can ever go wrong!",golden:0}, // warm but wrong
+];
+// "gamed" = easy but skewed: obvious warm+right and obvious curt+wrong only.
+// NO "warm but wrong" traps (r04,r08,r12) — those are what expose a weak judge.
+// Any half-decent judge aces this, so accuracy looks great for the wrong reason.
+const GAMED = [REAL[0],REAL[2],REAL[4],REAL[5],REAL[9]]; // 3 obvious-good + 2 obvious-bad(curt)
+
+const J = {
+  v1:`You grade whether a customer-support reply is GOOD. Good = warm and helpful.
+Score 1 if it sounds friendly and empathetic, 0 if cold or rude.
+If you cannot tell, return "Unknown".
+Respond ONLY as JSON: {"score":0 or 1 or "Unknown","reason":"<short>"}`,
+  tone:`You grade ONLY the TONE of a support reply, ignoring factual correctness.
+1 = empathetic/respectful, 0 = dismissive/curt/hostile. If unsure return "Unknown".
+Respond ONLY as JSON: {"score":0 or 1 or "Unknown","reason":"<short>"}`,
+  acc:`You grade ONLY the FACTUAL ACCURACY / actionability of a support reply, ignoring tone.
+1 = correct and genuinely actionable; 0 = wrong, overpromises, invents features, or unhelpful.
+A warm reply with false reassurance scores 0. If unsure return "Unknown".
+Respond ONLY as JSON: {"score":0 or 1 or "Unknown","reason":"<short>"}`,
+};
+
+async function ask(system, content, model){
+  let r;
+  try{
+    r = await fetch("/api/judge",{method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({model,system,content})});
+  }catch(netErr){ DEMO=true; return null; } // network/route unreachable -> demo
+
+  // If the response isn't JSON, the /api route didn't run (e.g. opened as a static
+  // file, wrong root dir, or function error returned an HTML page). Fall back cleanly.
+  const ct = r.headers.get("content-type")||"";
+  if(!r.ok || !ct.includes("application/json")){
+    DEMO=true; return null;
+  }
+  const d = await r.json();
+  if(d.demo){ DEMO=true; return null; }
+  if(d.error) throw new Error(d.error);
+  let t=(d.text||"").replace(/```json/g,"").replace(/```/g,"").trim();
+  try{ const o=JSON.parse(t); return {score:o.score,reason:o.reason||""}; }
+  catch(e){ return {score:"Unknown",reason:"parse_fail"}; }
+}
+let DEMO=false;
+
+// ----- DEMO fallback (clearly labeled, used only when no key) -----
+function demoJudge(v, row){
+  // emulate behavior so the page is explorable without a key
+  const warmButWrong = ['r04','r08','r12'].includes(row.id);
+  const curt = ['r02','r06','r10'].includes(row.id);
+  if(v==='v1') return {score: curt?0:1, reason:'(demo) follows tone'};
+  // v2/panel: tone & accuracy separated
+  const tone = curt?0:1;
+  const acc = (warmButWrong|| row.golden===0 && !curt)?0:(row.golden);
+  return {tone,acc,score:(tone===1&&acc===1)?1:0,reason:`(demo) tone=${tone} acc=${acc}`};
+}
+
+let judgeV="v1",dataV="real";
+document.getElementById('seg-judge').addEventListener('click',e=>{if(!e.target.dataset.v)return;
+  judgeV=e.target.dataset.v;[...e.currentTarget.children].forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===judgeV));});
+document.getElementById('seg-data').addEventListener('click',e=>{if(!e.target.dataset.d)return;
+  dataV=e.target.dataset.d;[...e.currentTarget.children].forEach(b=>b.setAttribute('aria-pressed',b.dataset.d===dataV));});
+
+document.getElementById('run').addEventListener('click',async()=>{
+  const btn=document.getElementById('run');btn.disabled=true;btn.textContent="Judging…";
+  document.getElementById('err').textContent="";DEMO=false;
+  const rows = dataV==='real'?REAL:GAMED;
+  const model = document.getElementById('model').value;
+  const out=[];
+  try{
+    for(const row of rows){
+      const content=[{type:"text",text:`CUSTOMER:\n${row.q}\n\nSUPPORT REPLY TO GRADE:\n${row.a}`}];
+      let score, reason, split=false;
+      if(judgeV==='v1'){
+        const r = await ask(J.v1,content,model) || demoJudge('v1',row);
+        score=norm(r.score); reason=r.reason;
+      } else {
+        let tn,ac;
+        if(DEMO){ const d=demoJudge('v2',row); tn={score:d.tone,reason:''}; ac={score:d.acc,reason:''}; }
+        else { [tn,ac]=await Promise.all([ask(J.tone,content,model),ask(J.acc,content,model)]); }
+        if(!tn||!ac){ const d=demoJudge('v2',row); tn={score:d.tone}; ac={score:d.acc}; }
+        if(judgeV==='panel'){
+          // multi-judge consensus: tone-judge and accuracy-judge each give a holistic vote too
+          // (simplified: a "split" is when the two dimensions disagree on overall good/bad)
+          const v1tone = norm(tn.score)===1, v1acc = norm(ac.score)===1;
+          split = (v1tone !== v1acc);
+        }
+        score = (norm(tn.score)===1 && norm(ac.score)===1)?1:0;
+        reason = `tone=${tn.score}; accuracy=${ac.score}`+(tn.reason?` — ${tn.reason}`:'');
+      }
+      out.push({row,score,reason,split,miss:score!==row.golden});
+    }
+    render(out);
+  }catch(err){ document.getElementById('err').textContent="API error: "+err.message; }
+  btn.disabled=false;btn.textContent="Run autorater ▸";
+});
+
+function norm(s){ return s==="Unknown"?0:Number(s); }
+function badge(v){ return v===1?`<span class="badge b-pass">good</span>`:
+  v===0?`<span class="badge b-fail">bad</span>`:`<span class="badge b-na">?</span>`; }
+
+function render(out){
+  document.getElementById('demo-banner').style.display = DEMO?'block':'none';
+  const correct=out.filter(o=>!o.miss).length,total=out.length;
+  const splits=out.filter(o=>o.split).length;
+  document.getElementById('board').style.display='grid';
+  document.getElementById('s-acc').innerHTML=Math.round(100*correct/total)+`<small>%</small>`;
+  document.getElementById('s-agree').innerHTML=correct+`<small>/${total}</small>`;
+  document.getElementById('s-miss').innerHTML=(total-correct);
+  document.getElementById('s-split').innerHTML=(judgeV==='panel'?splits:'—');
+  document.getElementById('results-panel').style.display='block';
+  document.getElementById('rows').innerHTML=out.map(o=>`
+    <tr class="${o.miss?'miss':''}">
+      <td class="reply"><div class="q">${o.row.q}</div>${o.row.a}
+        ${o.split?'<span class="chip">judges split</span>':''}
+        ${o.miss?'<div class="miss-flag">◆ MISS — read this</div>':''}
+        <div class="why">${o.reason}</div></td>
+      <td>${badge(o.row.golden)}</td>
+      <td>${badge(o.score)}</td>
+      <td>${o.miss?'<span class="badge b-fail">≠</span>':'<span class="badge b-pass">=</span>'}</td>
+    </tr>`).join("");
+  setTakeaway();
+}
+
+function setTakeaway(){
+  const tk=document.getElementById('takeaway');tk.classList.add('show');
+  let title="",body="",concept="";
+  if(dataV==='gamed'){
+    title="~100% — and it means nothing.";
+    body="The gamed set is lopsided and easy, so accuracy looks perfect because the <b>dataset is thin</b>, not because the judge is good. A high number on a weak dataset is the most common way an eval lies to you. Flip back to realistic.";
+    concept='Article: "Build balanced problem sets… avoid class-imbalanced evals."';
+  } else if(judgeV==='v1'){
+    title="v1 passes the warm-but-wrong replies.";
+    body="One judge grading \"is this good?\" collapses two questions and follows tone — so it passes friendly replies that are factually wrong (the invented button, \"refunds are instant\", \"100% safe\"). <b>One operator can't reliably grade two dimensions.</b>";
+    concept='Article: "grade each dimension with an isolated LLM-as-judge rather than using one to grade all dimensions."';
+  } else if(judgeV==='v2'){
+    title="v2 recovers them by splitting the judgment.";
+    body="Grading <b>tone</b> and <b>accuracy</b> as isolated judges, then requiring both, catches what v1 waved through. <b>The model didn't change — the eval design did.</b>";
+    concept='Article: "create clear, structured rubrics to grade each dimension… with an isolated LLM-as-judge."';
+  } else {
+    title="The panel shows you WHERE it's uncertain.";
+    body="Running tone and accuracy as a panel surfaces the <b>splits</b> — the replies where one dimension passes and the other fails. Those splits are exactly the rows worth a human's attention. <b>Disagreement is signal, not noise.</b>";
+    concept='Article: "Multi-judge consensus" + "Failures should seem fair… read the transcripts."';
+  }
+  document.getElementById('t-title').innerHTML=title;
+  document.getElementById('t-body').innerHTML=body;
+  document.getElementById('t-concept').innerHTML=concept;
+}
+
+// ----- PRE-LOADED MULTIMODAL SAMPLES (self-contained SVG "screenshots") -----
+// Each screenshot is a tiny SVG encoded to base64 and sent as a real image block,
+// so these are genuine multimodal calls with no external asset files.
+function svgB64(inner){
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="520" height="300">`+inner+`</svg>`;
+  return btoa(unescape(encodeURIComponent(svg)));
+}
+const SHOT_403 = svgB64(`
+  <rect width="520" height="300" fill="#1e1e24"/>
+  <rect x="40" y="60" width="440" height="180" rx="10" fill="#2b2b34" stroke="#c0392b" stroke-width="2"/>
+  <circle cx="80" cy="100" r="14" fill="#c0392b"/>
+  <text x="74" y="106" font-family="monospace" font-size="20" fill="#fff">!</text>
+  <text x="110" y="106" font-family="monospace" font-size="20" fill="#fff">HTTP 403 — Forbidden</text>
+  <text x="110" y="140" font-family="monospace" font-size="14" fill="#bbb">You don't have permission to access this resource.</text>
+  <text x="110" y="166" font-family="monospace" font-size="14" fill="#bbb">Error code: ACCESS_DENIED_ROLE_MISSING</text>
+  <text x="110" y="200" font-family="monospace" font-size="13" fill="#888">Contact your admin to request the Viewer role.</text>`);
+const SHOT_CHARGE = svgB64(`
+  <rect width="520" height="300" fill="#fbf8f0"/>
+  <text x="40" y="55" font-family="monospace" font-size="18" fill="#16140f">RECEIPT — Acme Plan</text>
+  <line x1="40" y1="70" x2="480" y2="70" stroke="#d8cfb8"/>
+  <text x="40" y="110" font-family="monospace" font-size="15" fill="#333">Apr 02  Monthly subscription   $29.00</text>
+  <text x="40" y="140" font-family="monospace" font-size="15" fill="#c0392b">Apr 02  Monthly subscription   $29.00</text>
+  <text x="40" y="170" font-family="monospace" font-size="13" fill="#888">(two charges, same day, same amount)</text>
+  <line x1="40" y1="200" x2="480" y2="200" stroke="#d8cfb8"/>
+  <text x="40" y="232" font-family="monospace" font-size="16" fill="#16140f">Total charged:  $58.00</text>`);
+const SHOT_CRASH = svgB64(`
+  <rect width="520" height="300" fill="#0f1117"/>
+  <text x="30" y="45" font-family="monospace" font-size="14" fill="#5cd65c">$ ./app --launch</text>
+  <text x="30" y="80" font-family="monospace" font-size="13" fill="#e74c3c">FATAL: NullPointerException at Launcher.init()</text>
+  <text x="30" y="104" font-family="monospace" font-size="13" fill="#bbb">  at com.acme.Launcher.init(Launcher.java:42)</text>
+  <text x="30" y="128" font-family="monospace" font-size="13" fill="#bbb">  at com.acme.Main.main(Main.java:11)</text>
+  <text x="30" y="164" font-family="monospace" font-size="13" fill="#f1c40f">Build version: 4.1.0  (latest: 4.2.0)</text>
+  <text x="30" y="200" font-family="monospace" font-size="13" fill="#888">Crash on startup, every time.</text>`);
+
+const SAMPLES = {
+  s1:{ q:"Here's a screenshot of the error I keep getting when I open the dashboard.",
+       a:"Thanks for the screenshot! That 403 means your session expired — just log back in and it'll clear right up. 😊",
+       shot:SHOT_403, name:"403_error.svg",
+       hint:"warm but wrong — the screenshot says it's a missing ROLE/permission, not an expired session, so 'log back in' won't fix it" },
+  s2:{ q:"I think I got billed twice — see attached receipt.",
+       a:"You're right, I can see two $29 charges on Apr 2 on the receipt. I've refunded the duplicate; it'll post in 3–5 business days.",
+       shot:SHOT_CHARGE, name:"receipt.svg",
+       hint:"good — reply matches what the receipt actually shows and gives a correct, actionable resolution" },
+  s3:{ q:"App won't open. Log attached.",
+       a:"Read the changelog. Update to 4.2 — your log shows you're on 4.1, which had a known launch crash.",
+       shot:SHOT_CRASH, name:"crash_log.svg",
+       hint:"cold but correct — the fix is right (log confirms 4.1) but the tone is curt; watch tone and accuracy split" },
+};
+
+document.getElementById('seg-samples').addEventListener('click',e=>{
+  const s=e.target.dataset.s; if(!s) return;
+  const ex=SAMPLES[s];
+  document.getElementById('byo-q').value=ex.q;
+  document.getElementById('byo-a').value=ex.a;
+  attached={kind:'image',media_type:'image/svg+xml',data:ex.shot,name:ex.name};
+  document.getElementById('attached').textContent=`Attached sample: ${ex.name} — ${ex.hint}`;
+  const pv=document.getElementById('preview');
+  pv.src=`data:image/svg+xml;base64,${ex.shot}`; pv.style.display='block';
+});
+
+// ----- MULTIMODAL: bring-your-own reply with attachment -----
+let attached=null; // {type, media_type, data}
+const dz=document.getElementById('dz'),fileInput=document.getElementById('file');
+dz.addEventListener('click',()=>fileInput.click());
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over');});
+dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('over');if(e.dataTransfer.files[0])loadFile(e.dataTransfer.files[0]);});
+fileInput.addEventListener('change',e=>{if(e.target.files[0])loadFile(e.target.files[0]);});
+function loadFile(f){
+  const reader=new FileReader();
+  reader.onload=()=>{
+    const b64=reader.result.split(',')[1];
+    if(f.type==='application/pdf'){ attached={kind:'document',media_type:'application/pdf',data:b64,name:f.name};
+      document.getElementById('preview').style.display='none'; }
+    else { attached={kind:'image',media_type:f.type,data:b64,name:f.name};
+      const pv=document.getElementById('preview'); pv.src=reader.result; pv.style.display='block'; }
+    document.getElementById('attached').textContent=`Attached: ${f.name}`;
+  };
+  reader.readAsDataURL(f);
+}
+
+// The API accepts png/jpeg/gif/webp images, not svg. Our sample "screenshots" are SVG,
+// so rasterize them to PNG in a canvas right before sending.
+function svgToPng(b64svg){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    img.onload=()=>{
+      const c=document.createElement('canvas'); c.width=img.width||520; c.height=img.height||300;
+      c.getContext('2d').drawImage(img,0,0);
+      resolve(c.toDataURL('image/png').split(',')[1]);
+    };
+    img.onerror=reject;
+    img.src=`data:image/svg+xml;base64,${b64svg}`;
+  });
+}
+
+document.getElementById('byo-run').addEventListener('click',async()=>{
+  const btn=document.getElementById('byo-run');btn.disabled=true;btn.textContent="Grading…";
+  const q=document.getElementById('byo-q').value, a=document.getElementById('byo-a').value;
+  const model=document.getElementById('model').value;
+  const out=document.getElementById('byo-out');out.innerHTML="";
+  // build multimodal content: text + optional attachment, judged on both dims
+  const content=[{type:"text",text:`CUSTOMER:\n${q}\n\nSUPPORT REPLY TO GRADE:\n${a}\n\n(Any attached image/PDF is context the reply refers to.)`}];
+  if(attached){
+    if(attached.kind==='image'){
+      let mt=attached.media_type, data=attached.data;
+      if(mt==='image/svg+xml'){ data=await svgToPng(attached.data); mt='image/png'; }
+      content.push({type:"image",source:{type:"base64",media_type:mt,data:data}});
+    } else {
+      content.push({type:"document",source:{type:"base64",media_type:"application/pdf",data:attached.data}});
+    }
+  }
+  try{
+    let tn,ac;
+    if(DEMO){
+      // illustrative verdicts that match each sample's teaching point
+      const name=attached&&attached.name;
+      if(name==='403_error.svg'){ tn={score:1,reason:'(demo) friendly'}; ac={score:0,reason:'(demo) screenshot shows a missing role, not an expired session — fix is wrong'}; }
+      else if(name==='crash_log.svg'){ tn={score:0,reason:'(demo) curt'}; ac={score:1,reason:'(demo) log confirms v4.1; update is the right fix'}; }
+      else { tn={score:1,reason:'(demo)'}; ac={score:1,reason:'(demo)'}; }
+    }
+    else { [tn,ac]=await Promise.all([ask(J.tone,content,model),ask(J.acc,content,model)]); }
+    if(!tn||!ac){ DEMO=true; tn={score:1,reason:'(demo)'};ac={score:1,reason:'(demo)'}; }
+    const good=(norm(tn.score)===1&&norm(ac.score)===1);
+    out.innerHTML=`<div class="panel" style="margin-top:0;background:var(--paper-2)">
+      <div style="font-family:'Fraunces',serif;font-size:18px;font-weight:600">
+        Verdict: ${good?'<span style="color:var(--accent-2)">acceptable</span>':'<span style="color:var(--accent)">not acceptable</span>'}</div>
+      <div style="margin-top:8px;font-size:14px">Tone judge: ${badge(norm(tn.score))} <span class="why">${tn.reason}</span></div>
+      <div style="font-size:14px">Accuracy judge: ${badge(norm(ac.score))} <span class="why">${ac.reason}</span></div>
+      ${attached?`<div class="concept" style="margin-top:10px">Judged WITH attachment "${attached.name}" — multimodal grading.</div>`:''}
+      ${DEMO?'<div class="concept">Illustrative (no API key configured).</div>':''}
+    </div>`;
+  }catch(err){ out.innerHTML=`<div class="err">API error: ${err.message}</div>`; }
+  btn.disabled=false;btn.textContent="Grade this reply ▸";
+});
+
+// ----- HUMAN-IN-THE-LOOP: you be the grader -----
+// A handful of replies (incl. the warm-but-wrong traps) for a person to label.
+const HUMAN_SET = [REAL[0], REAL[3], REAL[7], REAL[5], REAL[11]]; // good, warm-wrong, warm-wrong, curt-bad, warm-wrong
+const humanLabels = {}; // id -> 1/0
+
+function renderHumanRows(){
+  document.getElementById('human-rows').innerHTML = HUMAN_SET.map(row=>`
+    <div class="panel" style="margin:10px 0 0;background:var(--paper-2);box-shadow:none">
+      <div class="q" style="color:var(--muted);font-size:12.5px;margin-bottom:4px">${row.q}</div>
+      <div style="font-size:14px;margin-bottom:8px">${row.a}</div>
+      <div class="seg" data-id="${row.id}">
+        <button class="hbtn" data-id="${row.id}" data-v="1">good</button>
+        <button class="hbtn" data-id="${row.id}" data-v="0">bad</button>
+      </div>
+    </div>`).join("");
+}
+renderHumanRows();
+
+document.getElementById('human-rows').addEventListener('click', e=>{
+  const b=e.target.closest('.hbtn'); if(!b) return;
+  const id=b.dataset.id, v=Number(b.dataset.v);
+  humanLabels[id]=v;
+  // toggle pressed state within this row
+  [...b.parentElement.children].forEach(x=>x.setAttribute('aria-pressed', x.dataset.v==String(v)));
+  // enable run once all labeled
+  const all = HUMAN_SET.every(r=>humanLabels[r.id]!==undefined);
+  document.getElementById('human-run').disabled = !all;
+});
+
+document.getElementById('human-run').addEventListener('click', async ()=>{
+  const btn=document.getElementById('human-run'); btn.disabled=true; btn.textContent="Asking the AI judge…";
+  const model=document.getElementById('model').value;
+  const out=document.getElementById('human-out'); out.innerHTML="";
+  const results=[];
+  try{
+    for(const row of HUMAN_SET){
+      const content=[{type:"text",text:`CUSTOMER:\n${row.q}\n\nSUPPORT REPLY TO GRADE:\n${row.a}`}];
+      let tn,ac;
+      if(DEMO){ const d=demoJudge('v2',row); tn={score:d.tone}; ac={score:d.acc}; }
+      else { [tn,ac]=await Promise.all([ask(J.tone,content,model),ask(J.acc,content,model)]); }
+      if(!tn||!ac){ const d=demoJudge('v2',row); tn={score:d.tone}; ac={score:d.acc}; }
+      const ai=(norm(tn.score)===1 && norm(ac.score)===1)?1:0;
+      results.push({row, human:humanLabels[row.id], ai, agree: humanLabels[row.id]===ai});
+    }
+    const agreed=results.filter(r=>r.agree).length;
+    out.innerHTML=`
+      <div class="board" style="grid-template-columns:repeat(2,1fr)">
+        <div class="stat"><div class="k">You ↔ AI judge agreement</div><div class="v">${Math.round(100*agreed/results.length)}<small>%</small></div></div>
+        <div class="stat"><div class="k">Rows you disagreed on</div><div class="v">${results.length-agreed}</div></div>
+      </div>
+      <table><thead><tr><th>Reply</th><th>Your label</th><th>AI judge</th><th>=?</th></tr></thead>
+      <tbody>${results.map(r=>`
+        <tr class="${r.agree?'':'miss'}">
+          <td class="reply"><div class="q">${r.row.q}</div>${r.row.a}</td>
+          <td>${badge(r.human)}</td><td>${badge(r.ai)}</td>
+          <td>${r.agree?'<span class="badge b-pass">=</span>':'<span class="badge b-fail">≠</span>'}</td>
+        </tr>`).join("")}</tbody></table>
+      <div class="concept" style="margin-top:12px">This is calibration: when you and the AI judge disagree, one of you is wrong — and reading those rows is how you decide whether to fix the judge or your own rubric.${DEMO?' (Illustrative — no API key.)':''}</div>`;
+  }catch(err){ out.innerHTML=`<div class="err">API error: ${err.message}</div>`; }
+  btn.disabled=false; btn.textContent="Label all, then compare with the AI judge ▸";
+});
+</script>
+</body>
+</html>

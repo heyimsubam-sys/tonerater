@@ -1,0 +1,7 @@
+{
+  "name": "tonerater",
+  "version": "1.0.0",
+  "description": "A tiny multimodal autorater for customer-support replies — a learning project about AI evals.",
+  "type": "module",
+  "license": "MIT"
+}
