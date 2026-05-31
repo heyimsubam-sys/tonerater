@@ -1,4 +1,4 @@
-# ToneRater 🎚️
+# ToneRater 
 
 **A tiny multimodal autorater for customer-support replies — built to learn how AI evaluation actually works.**
 
